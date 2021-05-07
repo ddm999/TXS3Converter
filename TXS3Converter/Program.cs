@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 
 using GTTools.Formats;
+using GTTools.Outputs;
 
 namespace GTTools
 {
@@ -84,7 +85,12 @@ namespace GTTools
                     ProcessTXS3Texture(path);
                     break;
                 case "MDL3":
-                    ProcessMDL3Model(path);
+                    MDL3.TexturesFromFile(path);
+                    break;
+                case PACB.MAGIC:
+                case PACB.MAGIC_LE:
+                    PACB pacb = PACB.FromFile(path);
+                    OBJ.FromPACB(pacb, path);
                     break;
                 default:
                     if (!_texConvExists && !File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "texconv.exe")))
@@ -126,11 +132,6 @@ namespace GTTools
 
             tex.SaveAsPng(finalFileName);
             Console.WriteLine($"Converted {currentFileName} to png.");
-        }
-
-        static void ProcessMDL3Model(string path)
-        {
-            MDL3.FromFile(path);
         }
 
         static string GetFileMagic(string path)

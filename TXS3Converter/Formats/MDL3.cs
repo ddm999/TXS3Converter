@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Text;
 
 using System.IO;
+using Syroot.BinaryData.Core;
 using Syroot.BinaryData.Memory;
 
 using GTTools.Formats.Entities;
@@ -12,22 +13,77 @@ namespace GTTools.Formats
     {
         public const string MAGIC = "MDL3";
 
-        public Dictionary<uint, MDL3MeshInfo> MeshInfo { get; private set; } = new Dictionary<uint, MDL3MeshInfo>();
+        public Dictionary<uint, MDL3MeshInfo> MeshInfo = new();
+        public List<TXS3> Textures = new();
+        public List<MDL3Mesh> Meshes = new();
 
-        public Dictionary<uint, MDL3Mesh> Meshes { get; private set; } = new Dictionary<uint, MDL3Mesh>();
+        public static MDL3 ModelFromSpan(ReadOnlySpan<byte> span)
+        {
+            var sr = new SpanReader(span, endian: Endian.Big);
 
-        public List<TXS3> Textures { get; set; } 
+            MDL3 mdl = new MDL3();
 
-        //Extract MDL3 Standard and (HIGHLOD vertices only)
-        public static MDL3 FromFile(string path)
+            if (sr.ReadStringRaw(4) != MAGIC)
+                return mdl;
+
+            // in packs, this sometimes isn't size? like, whopping huge compared to real size
+            //  so maybe this is memory to reserve? and texture data adds to make this size?
+            //  that would imply that the MDL is responsible for loading the DDS data though,
+            //   and I don't really think that's true?
+            int size = sr.ReadInt32();
+
+            sr.Position += 0x0C;
+            uint meshCount = sr.ReadUInt16();
+            uint meshInfoCount = sr.ReadUInt16();
+            uint fvfTableCount = sr.ReadUInt16();
+            uint boneCount = sr.ReadUInt16();
+
+            sr.Position += 0x1C;
+            uint meshTableAddress = sr.ReadUInt32();
+            uint meshInfoTableAddress = sr.ReadUInt32();
+            uint fvfTableAddress = sr.ReadUInt32();
+            uint unkOffset2 = sr.ReadUInt32();
+            uint txsOffset = sr.ReadUInt32();
+            uint shdsOffset = sr.ReadUInt32();
+            uint boneOffset = sr.ReadUInt32();
+
+            Console.WriteLine($"Found model with {meshCount} meshes");
+
+            MDL3FVF[] fvfInfo = new MDL3FVF[fvfTableCount];
+            for (int i = 0; i < fvfTableCount; i++)
+            {
+                sr.Position = (int)(fvfTableAddress + i*0x78);
+                fvfInfo[i] = MDL3FVF.FromStream(ref sr);
+            }
+
+            mdl.MeshInfo = new();
+            for (uint i = 0; i < meshInfoCount; i++)
+            {
+                sr.Position = (int)(meshInfoTableAddress + i*0x08);
+                mdl.MeshInfo.Add(i, MDL3MeshInfo.FromStream(ref sr));
+            }
+
+            mdl.Meshes = new();
+            for (int i = 0; i < meshCount; i++)
+            {
+                sr.Position = (int)(meshTableAddress + i*0x30);
+                mdl.Meshes.Add(MDL3Mesh.FromStream(ref sr, fvfInfo));
+            }
+
+            if (txsOffset >= span.Length)
+            {
+                Console.WriteLine("bruh");
+            }
+
+            return mdl;
+        }
+
+        public static MDL3 TexturesFromFile(string path)
         {
             if (!File.Exists(path))
                 throw new FileNotFoundException("File does not exist");
 
-            byte[] file = File.ReadAllBytes(path);
-
-            // Every format is read as BE.
-            var sr = new SpanReader(file, endian: Syroot.BinaryData.Core.Endian.Big);
+            var sr = new SpanReader(File.ReadAllBytes(path), endian: Endian.Big);
 
             if (sr.Length < 4 || sr.ReadStringRaw(4) != MAGIC)
                 throw new InvalidDataException("Not a valid MDL3 image file.");
@@ -65,26 +121,6 @@ namespace GTTools.Formats
                 text.SaveAsPng($"{j}.png");
                 j++;
             }
-
-            sr.Position = (int)meshInfoTableAddress;
-            for (int i = 0; i < meshCount; i++)
-            {
-                MDL3Mesh mesh = MDL3Mesh.FromStream(ref sr);
-                mdl.Meshes.Add(mesh.MeshIndex, mesh);
-            }
-
-            sr.Position = (int)unkOffset;
-            for (int i = 0; i < meshInfoCount; i++)
-            {
-                MDL3MeshInfo meshInfo = MDL3MeshInfo.FromStream(ref sr);
-                mdl.MeshInfo.Add(meshInfo.MeshIndex, meshInfo);
-            }
-
-            // Flexible Vertexes
-            MDL3FVF[] vertexInfo = new MDL3FVF[fvfTableCount];
-            sr.Position = (int)fvfTableAddress;
-            for (int i = 0; i < fvfTableCount; i++)
-                vertexInfo[i] = MDL3FVF.FromStream(ref sr);
 
             return null;
         }

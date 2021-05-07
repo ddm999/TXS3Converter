@@ -9,90 +9,103 @@ namespace GTTools.Formats.Entities
 {
     public class MDL3Mesh
     {
-        private byte Flag1;
-        private byte Flag2;
-        public ushort MeshIndex { get; set; }
-        public ushort UnkIndex { get; set; }
-        private ushort null1;
-
-        private uint VertexCount { get; set; }
-        public uint VertexOffset { get; set; }
-        public Vertex[] Verts { get; set; }
-
-        private uint null3;
-        public uint FacesDataLength { get; set; }
-        public uint FacesOffset { get; set; }
-
-        public Face[] Faces { get; set; }
-
-        public uint null5;
-        public uint null6;
-
-        private byte Flag3;
-        private byte Flag4;
-        public ushort Unk;
-        private uint UnkOffset; // Offset that points to a list of floats
-        private uint UnkOffset2;
-
-        public static MDL3Mesh FromStream(ref SpanReader sr)
-        {
-            var meshInfo = new MDL3Mesh();
-            meshInfo.Flag1 = sr.ReadByte();   //unk flag 1
-            meshInfo.Flag2 = sr.ReadByte();   //unk flag 2
-            meshInfo.MeshIndex = sr.ReadUInt16();
-            meshInfo.UnkIndex = sr.ReadUInt16(); 
-            meshInfo.null1 = sr.ReadUInt16(); 
-            meshInfo.VertexCount = sr.ReadUInt32(); 
-            meshInfo.VertexOffset = sr.ReadUInt32(); 
-
-            if (meshInfo.VertexCount > 0)
-            {
-                meshInfo.Verts = new Vertex[meshInfo.VertexCount];
-                int curPos = sr.Position;
-                sr.Position = (int)meshInfo.VertexOffset;
-                for (int i = 0; i < meshInfo.VertexCount; i++)
-                    meshInfo.Verts[i] = MemoryMarshal.Read<Vertex>(sr.ReadBytes(20));
-                sr.Position = curPos;
-            }
-
-            meshInfo.null3 = sr.ReadUInt32(); 
-            meshInfo.FacesDataLength = sr.ReadUInt32(); 
-            meshInfo.FacesOffset = sr.ReadUInt32(); 
-            if (meshInfo.FacesDataLength > 0)
-            {
-                meshInfo.Faces = new Face[meshInfo.FacesDataLength / 3];
-                int curPos = sr.Position;
-                sr.Position = (int)meshInfo.FacesOffset;
-                for (int i = 0; i < meshInfo.FacesDataLength / 3; i++)
-                    meshInfo.Faces[i] = MemoryMarshal.Read<Face>(sr.ReadBytes(6));
-                sr.Position = curPos;
-            }
-
-            meshInfo.null5 = sr.ReadUInt32(); 
-            meshInfo.null6 = sr.ReadUInt32();
-            meshInfo.Flag3 = sr.ReadByte();   //unk flag 3
-            meshInfo.Flag4 = sr.ReadByte();   //unk flag 4
-            meshInfo.Unk = sr.ReadUInt16();
-            meshInfo.UnkOffset = sr.ReadUInt32();
-            meshInfo.UnkOffset2 = sr.ReadUInt32();
-
-            return meshInfo;
-        }
-
         public struct Vertex
         {
-            float X;
-            float Y;
-            float Z;
-            int pad;
-            int unkFlags;
+            public float X;
+            public float Y;
+            public float Z;
         }
 
         public struct Face
         {
-            ushort X;
-            ushort Y;
-            ushort Z;
+            public ushort A;
+            public ushort B;
+            public ushort C;
+        }
+
+        public Vertex[] Verts = Array.Empty<Vertex>();
+        public Face[] Faces = Array.Empty<Face>();
+        public Vertex[] BBox;
+
+        public static MDL3Mesh FromStream(ref SpanReader sr, MDL3FVF[] fvf = null)
+        {
+            var meshInfo = new MDL3Mesh();
+
+            uint flag1 = sr.ReadByte();   //unk flag 1
+            uint flag2 = sr.ReadByte();   //unk flag 2
+            uint fvfIndex = sr.ReadUInt16();
+            uint unkIndex = sr.ReadUInt16();             // not unique... maybe texture index?
+            uint null1 = sr.ReadUInt16();                // not actually a null, seems to be more flags
+            uint vertexCount = sr.ReadUInt32();
+            uint vertexOffset = sr.ReadUInt32();         // null for PS3 tracks, unsure how they find the data
+
+            uint null3 = sr.ReadUInt32();                // actually a null
+            uint facesDataLength = sr.ReadUInt32();
+            uint facesOffset = sr.ReadUInt32();          // null for PS3 tracks, unsure how they find the data
+
+            uint null5 = sr.ReadUInt32();
+            uint null6 = sr.ReadUInt32();
+            uint facesCount = sr.ReadUInt32();           // faces count just randomly further in the struct 🧠
+            uint boxOffset = sr.ReadUInt32();            // pure X,Y,Z that defines a bounding 6-face for the object: unknown use
+            uint unkOffset2 = sr.ReadUInt32();
+
+            if (fvf != null)
+            {
+                // get the vertex data length by using index into the fvf list
+                uint fvfDataLength = fvf[fvfIndex].dataLength;
+
+                if (vertexCount > 0 && vertexOffset != 0)
+                {
+                    meshInfo.Verts = new Vertex[vertexCount];
+                    int curPos = sr.Position;
+                    for (int i = 0; i < vertexCount; i++)
+                    {
+                        sr.Position = (int)(vertexOffset + i*fvfDataLength);
+                        meshInfo.Verts[i].X = sr.ReadSingle();
+                        meshInfo.Verts[i].Y = sr.ReadSingle();
+                        meshInfo.Verts[i].Z = sr.ReadSingle();
+                    }
+                    sr.Position = curPos;
+                }
+            }
+
+            // unsure if these are possible, but no harm in correcting
+            if (facesCount > 0 && facesDataLength == 0)
+                facesDataLength = facesCount * 3;
+            else if (facesCount == 0 && facesDataLength > 0)
+                facesCount = facesDataLength / 3;
+
+            if (facesDataLength > 0 && facesOffset != 0)
+            {
+                meshInfo.Faces = new Face[facesCount];
+                int curPos = sr.Position;
+                sr.Position = (int)facesOffset;
+                for (int i = 0; i < facesDataLength / 3; i++)
+                {
+                    meshInfo.Faces[i].A = sr.ReadUInt16();
+                    meshInfo.Faces[i].B = sr.ReadUInt16();
+                    meshInfo.Faces[i].C = sr.ReadUInt16();
+                }
+                
+                sr.Position = curPos;
+            }
+
+            if (boxOffset > 0)
+            {
+                meshInfo.BBox = new Vertex[6];
+                int curPos = sr.Position;
+                sr.Position = (int)boxOffset;
+                for (int i = 0; i < 6; i++)
+                {
+                    meshInfo.BBox[i].X = sr.ReadSingle();
+                    meshInfo.BBox[i].Y = sr.ReadSingle();
+                    meshInfo.BBox[i].Z = sr.ReadSingle();
+                }
+
+                sr.Position = curPos;
+            }
+
+            return meshInfo;
         }
     }
 }
