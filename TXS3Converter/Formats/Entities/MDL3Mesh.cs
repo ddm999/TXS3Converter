@@ -27,7 +27,7 @@ namespace GTTools.Formats.Entities
         public Face[] Faces = Array.Empty<Face>();
         public Vertex[] BBox;
 
-        public static MDL3Mesh FromStream(ref SpanReader sr, MDL3FVF[] fvf = null)
+        public static MDL3Mesh FromStream(ref SpanReader sr, MDL3FVF[] fvf = null, int n = 0)
         {
             var meshInfo = new MDL3Mesh();
 
@@ -48,6 +48,12 @@ namespace GTTools.Formats.Entities
             uint facesCount = sr.ReadUInt32();           // faces count just randomly further in the struct 🧠
             uint boxOffset = sr.ReadUInt32();            // pure X,Y,Z that defines a bounding 6-face for the object: unknown use
             uint unkOffset2 = sr.ReadUInt32();
+
+            if (vertexOffset > sr.Length || facesOffset > sr.Length || boxOffset > sr.Length)
+            {
+                //Console.WriteLine($"Mesh in obj_{n} cannot be loaded: uses other memory.");
+                return meshInfo;
+            }
 
             if (fvf != null)
             {
@@ -80,13 +86,33 @@ namespace GTTools.Formats.Entities
                 meshInfo.Faces = new Face[facesCount];
                 int curPos = sr.Position;
                 sr.Position = (int)facesOffset;
-                for (int i = 0; i < facesDataLength / 3; i++)
+                bool badFace = false;
+                for (int i = 0; i < facesCount; i++)
                 {
-                    meshInfo.Faces[i].A = sr.ReadUInt16();
-                    meshInfo.Faces[i].B = sr.ReadUInt16();
-                    meshInfo.Faces[i].C = sr.ReadUInt16();
+                    if (sr.Position != sr.Length)
+                    {
+                        ushort a = sr.ReadUInt16();
+                        ushort b = sr.ReadUInt16();
+                        ushort c = sr.ReadUInt16();
+                        if (a <= vertexCount && b <= vertexCount && c <= vertexCount)
+                        {
+                            meshInfo.Faces[i].A = a;
+                            meshInfo.Faces[i].B = b;
+                            meshInfo.Faces[i].C = c;
+                        }
+                        else
+                            badFace = true;
+                    }
+                    else
+                    {
+                        badFace = true;
+                        break;
+                    }
                 }
-                
+
+                if (badFace)
+                    Console.WriteLine($"Model's obj_{n} will have missing faces (tristrips not supported).");
+
                 sr.Position = curPos;
             }
 

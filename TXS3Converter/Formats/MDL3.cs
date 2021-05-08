@@ -67,7 +67,7 @@ namespace GTTools.Formats
             for (int i = 0; i < meshCount; i++)
             {
                 sr.Position = (int)(meshTableAddress + i*0x30);
-                mdl.Meshes.Add(MDL3Mesh.FromStream(ref sr, fvfInfo));
+                mdl.Meshes.Add(MDL3Mesh.FromStream(ref sr, fvfInfo, i));
             }
 
             if (txsOffset >= span.Length)

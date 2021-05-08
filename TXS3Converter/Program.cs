@@ -19,12 +19,29 @@ namespace GTTools
             Console.WriteLine("Gran Turismo TXS3 Converter");
             if (args.Length < 1)
             {
-                Console.WriteLine("    Usage: <input_files>");
+                Console.WriteLine("    Usage: <input_files>\n");
+                Console.WriteLine("    When handling PACB files, you can also provide '-o <output_directory>'.");
+                Console.WriteLine("    Providing this incorrectly won't error but instead cause unintended behaviour,\n     so be sure you're running the right command.");
             }
             else
             {
+                bool skiparg = false;
                 foreach (var arg in args)
                 {
+                    if (skiparg == true)
+                    {
+                        skiparg = false;
+                        continue;
+                    }
+
+                    // named arg shouldn't be treated as files
+                    if (arg == "-o")
+                    {
+                        // and also skip the arg itself
+                        skiparg = true;
+                        continue;
+                    }
+
                     if (!File.Exists(arg) && !Directory.Exists(arg))
                     {
                         Console.WriteLine($"File does not exist: {arg}");
@@ -39,15 +56,15 @@ namespace GTTools
                         foreach (string f in files)
                         {
                             currentFileName = Path.GetFileName(f);
-                            try
-                            {
+                            //try
+                            //{
                                 ProcessFile(f, args);
                                 processedFiles++;
-                            }
-                            catch (Exception e)
-                            {
-                                Console.WriteLine($@"[!] Could not convert {currentFileName} : {e.Message}");
-                            }
+                            //}
+                            //catch (Exception e)
+                            //{
+                            //    Console.WriteLine($@"[!] Could not convert {currentFileName} : {e.Message}");
+                            //}
                         }
                     }
                     else
@@ -56,26 +73,30 @@ namespace GTTools
                             isBatchConvert = true;
 
                         currentFileName = Path.GetFileName(arg);
-                        try
-                        {
+                        //try
+                        //{
                             ProcessFile(arg, args);
                             processedFiles++;
-                        }
-                        catch (Exception e)
-                        {
-                            Console.WriteLine($@"[!] Could not convert {currentFileName} : {e.Message}");
-                        }
+                        //}
+                        //catch (Exception e)
+                        //{
+                        //    Console.WriteLine($@"[!] Could not convert {currentFileName} : {e.Message}");
+                        //}
                     }
                 }
+                Console.WriteLine($"Done, {processedFiles} files were converted.");
             }
-
-            Console.WriteLine($"Done, {processedFiles} files were converted.");
         }
 
         static bool _texConvExists = false;
         static void ProcessFile(string path, string[] args)
         {
             currentFileName = Path.GetFileName(path);
+
+            string newpath = "";
+
+            if (args.Contains("-o"))
+                newpath = args[Array.IndexOf(args, "-o")+1];
             
             string magic = GetFileMagic(path);
             switch (magic)
@@ -90,7 +111,11 @@ namespace GTTools
                 case PACB.MAGIC:
                 case PACB.MAGIC_LE:
                     PACB pacb = PACB.FromFile(path);
-                    OBJ.FromPACB(pacb, path);
+                    if (newpath != "")
+                        newpath += "/" + Path.GetFileName(path);
+                    else
+                        newpath = Path.GetFileName(path);
+                    OBJ.FromPACB(pacb, newpath);
                     break;
                 default:
                     if (!_texConvExists && !File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "texconv.exe")))

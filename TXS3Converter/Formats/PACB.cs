@@ -27,7 +27,7 @@ namespace GTTools.Formats
         public List<(PACBTypes, int)> DataOffsets { get; private set; } = new List<(PACBTypes, int)>();
         
         public const string MAGIC = "PACB";
-        public const string MAGIC_LE = "BCAP";
+        public const string MAGIC_LE = "PACL";
 
         public Dictionary<uint, MDL3> Models { get; private set; } = new Dictionary<uint, MDL3>();
 
@@ -68,7 +68,7 @@ namespace GTTools.Formats
                 PACBTypes type = PACBTypes.padding;
                 switch (i)
                 {
-                    case uint when i < 7:
+                    case uint when i < 7: // i hate this
                     case 24:
                         type = PACBTypes.MDL3;
                         break;
@@ -95,9 +95,18 @@ namespace GTTools.Formats
             {
                 if (pacb.DataOffsets[i].Item1 == PACBTypes.MDL3)
                 {
-                    pacb.Models.Add(n, MDL3.ModelFromSpan(
+                    if (i < pacb.DataOffsets.Count - 1)
+                    {
+                        pacb.Models.Add(n, MDL3.ModelFromSpan(
                                          span.Slice(pacb.DataOffsets[i].Item2,
-                                                    pacb.DataOffsets[i + 1].Item2 - 1)));
+                                                    pacb.DataOffsets[i + 1].Item2 - pacb.DataOffsets[i].Item2)));
+                    }
+                    else
+                    {
+                        pacb.Models.Add(n, MDL3.ModelFromSpan(
+                                         span.Slice(pacb.DataOffsets[i].Item2,
+                                                    span.Length - pacb.DataOffsets[i].Item2)));
+                    }
                     n++;
                 }
             }

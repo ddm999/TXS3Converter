@@ -13,6 +13,9 @@ namespace GTTools.Outputs
             for (uint i = 0; i < pacb.Models.Count; i++)
             {
                 bool anyMeshSuccessful = false;
+                string dirname = Path.GetDirectoryName(path);
+                if (dirname != "")
+                    Directory.CreateDirectory(dirname);
                 string newpath = Path.ChangeExtension(path, $"mdl_{i}.obj");
                 using (StreamWriter sw = new(newpath))
                 {
@@ -24,38 +27,55 @@ namespace GTTools.Outputs
                     for (int n = 0; n < mdl.Meshes.Count; n++)
                     {
                         MDL3Mesh mesh = mdl.Meshes[n];
+                        bool badVertex = false;
+                        bool emptyFace = false;
                         if (mesh.Verts.Length != 0 && mesh.Faces.Length != 0)
                         {
+                            bool ok = true;
                             sw.Write($"o obj_{n}\n");
                             for (int v = 0; v < mesh.Verts.Length; v++)
                             {
-                                sw.Write($"v {mesh.Verts[v].X:f} {mesh.Verts[v].Y:f} {mesh.Verts[v].Z:f}\n");
+                                if (float.IsNaN(mesh.Verts[v].X) || float.IsNaN(mesh.Verts[v].Y) || float.IsNaN(mesh.Verts[v].Z) ||
+                                    mesh.Verts[v].X > 1e9 || mesh.Verts[v].Y > 1e9 || mesh.Verts[v].Z > 1e9 ||
+                                    mesh.Verts[v].X < -1e9 || mesh.Verts[v].Y < -1e9 || mesh.Verts[v].Z < -1e9)
+                                {
+                                    sw.Write($"v 0.0 0.0 0.0\n");
+                                    badVertex = true;
+                                    ok = false;
+                                }
+                                else
+                                {
+                                    sw.Write($"v {mesh.Verts[v].X:f} {mesh.Verts[v].Y:f} {mesh.Verts[v].Z:f}\n");
+                                }
                             }
 
-                            bool skippedFaces = false;
                             for (int f = 0; f < mesh.Faces.Length; f++)
                             {
-                                if (mesh.Faces[f].A == 0xFFFF || mesh.Faces[f].B == 0xFFFF || mesh.Faces[f].C == 0xFFFF)
+                                if (mesh.Faces[f].A == 0 && mesh.Faces[f].B == 0 && mesh.Faces[f].C == 0)
                                 {
-                                    skippedFaces = true;
-                                    continue;
+                                    emptyFace = true;
+                                    ok = false;
                                 }
-
-                                sw.Write($"f {mesh.Faces[f].A + vertexOffset} {mesh.Faces[f].B + vertexOffset} {mesh.Faces[f].C + vertexOffset}\n");
+                                else
+                                {
+                                    sw.Write($"f {mesh.Faces[f].A + vertexOffset} {mesh.Faces[f].B + vertexOffset} {mesh.Faces[f].C + vertexOffset}\n");
+                                }
                             }
                             vertexOffset += mesh.Verts.Length;
 
-                            if (skippedFaces)
-                            {
-                                Console.WriteLine($"Model {i}, obj_{n} will have missing faces (tristrips not supported).");
-                            }
-                            anyMeshSuccessful = true;
+                            if (ok)
+                                anyMeshSuccessful = true;
                         }
+
+                        if (badVertex)
+                            Console.WriteLine("Model's vertex data could not be parsed entirely:\n some vertices may be incorrect.");
+                        if (emptyFace)
+                            Console.WriteLine("Model's face data could not be parsed entirely:\n some faces may be missing.");
                     }
                 }
                 if (!anyMeshSuccessful)
                 {
-                    Console.WriteLine($"Model {i} does not use offset data and has not been extracted (unsupported).");
+                    Console.WriteLine($"Model {i} could not be extracted (unsupported data).");
                     File.Delete(newpath);
                 }
                 else
