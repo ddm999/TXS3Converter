@@ -16,6 +16,7 @@ namespace GTTools.Formats
         public Dictionary<uint, MDL3MeshInfo> MeshInfo = new();
         public List<TXS3> Textures = new();
         public List<MDL3Mesh> Meshes = new();
+        public List<MDL3FloatyMap> FloatyMaps = new();
 
         public static MDL3 ModelFromSpan(ReadOnlySpan<byte> span)
         {
@@ -32,13 +33,17 @@ namespace GTTools.Formats
             //   and I don't really think that's true?
             int size = sr.ReadInt32();
 
-            sr.Position += 0x0C;
+            sr.Position += 0x08;
+            uint floatymapCount = sr.ReadUInt16();
+            uint gtbeCount = sr.ReadUInt16();
             uint meshCount = sr.ReadUInt16();
             uint meshInfoCount = sr.ReadUInt16();
             uint fvfTableCount = sr.ReadUInt16();
             uint boneCount = sr.ReadUInt16();
 
-            sr.Position += 0x1C;
+            sr.Position += 0x14;
+            uint floatymapTableAddress = sr.ReadUInt32();
+            uint gtbeTableOffset = sr.ReadUInt32();
             uint meshTableAddress = sr.ReadUInt32();
             uint meshInfoTableAddress = sr.ReadUInt32();
             uint fvfTableAddress = sr.ReadUInt32();
@@ -68,6 +73,13 @@ namespace GTTools.Formats
             {
                 sr.Position = (int)(meshTableAddress + i*0x30);
                 mdl.Meshes.Add(MDL3Mesh.FromStream(ref sr, fvfInfo, i));
+            }
+
+            mdl.FloatyMaps = new();
+            for (int i = 0; i < floatymapCount; i++)
+            {
+                sr.Position = (int)(floatymapTableAddress + i*0x30);
+                mdl.FloatyMaps.Add(MDL3FloatyMap.FromStream(ref sr, i));
             }
 
             if (txsOffset >= span.Length)
@@ -125,19 +137,15 @@ namespace GTTools.Formats
                 {
                     sw.Position = (int)(offset + meshTableAddress + n * 0x30);
                     Console.WriteLine($"Hiding obj_{n} @ 0x{sr.Position:X}");
-                    sw.Position += 0x6;
-                    sw.WriteUInt16(0); // null1 (visibility flags?)
-
-                    /*
-                    sw.Position += 0x4;
-                    sw.WriteUInt32(0); // textureIndex (I think 0 is always invisible lol)
-                    sw.Position += 0x2;
+                    sw.Position += 0x8;
                     sw.WriteUInt32(0); // vertexCount
+                    sw.WriteUInt32(0); // vertexOffset
                     sw.Position += 0x4;
                     sw.WriteUInt32(0); // facesDataLength
-                    sw.Position += 0x10;
+                    sw.WriteUInt32(0); // facesOffset
+                    sw.Position += 0x08;
                     sw.WriteUInt32(0); // facesCount
-                    */
+                    sw.WriteUInt32(0); // boxOffset
                 }
                 else if (meshEditVertex.ContainsKey(n))
                 {

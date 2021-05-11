@@ -137,6 +137,61 @@ namespace GTTools.Outputs
                 {
                     Console.WriteLine($"Successfully created {Path.GetFileName(newpath)}");
                 }
+
+                anyMeshSuccessful = false;
+                newpath = Path.ChangeExtension(path, $"mdl_{i}_floaty.obj");
+                using (StreamWriter sw = new(newpath))
+                {
+                    int vertexOffset = 1;
+                    sw.Write("# outputted by TXS3Converter\ns off\n");
+                    for (int n = 0; n < mdl.FloatyMaps.Count; n++)
+                    {
+                        MDL3FloatyMap fm = mdl.FloatyMaps[n];
+                        bool badVertex = false;
+                        if (fm.Verts.Count == 8)
+                        {
+                            bool ok = true;
+                            sw.Write($"o floaty_{n}\n");
+                            for (int v = 0; v < fm.Verts.Count; v++)
+                            {
+                                if (float.IsNaN(fm.Verts[v].X) || float.IsNaN(fm.Verts[v].Y) || float.IsNaN(fm.Verts[v].Z) ||
+                                    fm.Verts[v].X > 1e9 || fm.Verts[v].Y > 1e9 || fm.Verts[v].Z > 1e9 ||
+                                    fm.Verts[v].X < -1e9 || fm.Verts[v].Y < -1e9 || fm.Verts[v].Z < -1e9)
+                                {
+                                    sw.Write($"v 0.0 0.0 0.0\n");
+                                    badVertex = true;
+                                    ok = false;
+                                }
+                                else
+                                {
+                                    sw.Write($"v {fm.Verts[v].X:f} {fm.Verts[v].Y:f} {fm.Verts[v].Z:f}\n");
+                                }
+                            }
+                            sw.Write($"f {vertexOffset + 0} {vertexOffset + 1} {vertexOffset + 2} {vertexOffset + 3} \n" +
+                                     $"f {vertexOffset + 4} {vertexOffset + 5} {vertexOffset + 6} {vertexOffset + 7} \n" +
+                                     $"f {vertexOffset + 0} {vertexOffset + 3} {vertexOffset + 7} {vertexOffset + 4} \n" +
+                                     $"f {vertexOffset + 1} {vertexOffset + 2} {vertexOffset + 6} {vertexOffset + 5} \n" +
+                                     $"f {vertexOffset + 0} {vertexOffset + 1} {vertexOffset + 5} {vertexOffset + 4} \n" +
+                                     $"f {vertexOffset + 2} {vertexOffset + 3} {vertexOffset + 7} {vertexOffset + 6} \n");
+                            vertexOffset += 8;
+
+                            if (ok)
+                                anyMeshSuccessful = true;
+                        }
+
+                        if (badVertex)
+                            Console.WriteLine("Model's floaty data could not be parsed entirely:\n some floaty may be incorrect.");
+                    }
+                }
+                if (!anyMeshSuccessful)
+                {
+                    Console.WriteLine($"Model {i}'s floaty could not be extracted (unsupported data).");
+                    File.Delete(newpath);
+                }
+                else
+                {
+                    Console.WriteLine($"Successfully created {Path.GetFileName(newpath)}");
+                }
             }
         }
     }

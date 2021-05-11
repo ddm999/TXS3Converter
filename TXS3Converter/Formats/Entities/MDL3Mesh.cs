@@ -39,15 +39,15 @@ namespace GTTools.Formats.Entities
             uint vertexCount = sr.ReadUInt32();          // UNUSED by game
             uint vertexOffset = sr.ReadUInt32();         // null for PS3 tracks, unsure how they find the data
 
-            uint null3 = sr.ReadUInt32();                // 0x00000000
+            uint null3 = sr.ReadUInt32();                // 0x00000000?
             uint facesDataLength = sr.ReadUInt32();      // UNUSED by game
             uint facesOffset = sr.ReadUInt32();          // null for PS3 tracks, unsure how they find the data
 
-            uint null5 = sr.ReadUInt32();                // 0x00000000
+            uint null5 = sr.ReadUInt32();                // 0x00000000?
             uint null6 = sr.ReadUInt32();                // 0x0000FFFF
             uint facesCount = sr.ReadUInt32();           // UNUSED by game
-            uint boxOffset = sr.ReadUInt32();            // pure X,Y,Z that defines a bounding 6-face for the object: unknown use
-            uint unkOffset2 = sr.ReadUInt32();           // null?
+            uint boxOffset = sr.ReadUInt32();            // 8 non-FVF vertices that define a bounding 6-face for the object: used for culling
+            uint unkOffset2 = sr.ReadUInt32();           // 0x00000000?
 
             if (vertexOffset > sr.Length || facesOffset > sr.Length || boxOffset > sr.Length)
             {
