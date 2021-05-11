@@ -12,6 +12,8 @@ namespace GTTools.Outputs
         {
             for (uint i = 0; i < pacb.Models.Count; i++)
             {
+                MDL3 mdl = pacb.Models[i];
+
                 bool anyMeshSuccessful = false;
                 string dirname = Path.GetDirectoryName(path);
                 if (dirname != "")
@@ -19,8 +21,6 @@ namespace GTTools.Outputs
                 string newpath = Path.ChangeExtension(path, $"mdl_{i}.obj");
                 using (StreamWriter sw = new(newpath))
                 {
-                    MDL3 mdl = pacb.Models[i];
-
                     int vertexOffset = 1;
 
                     sw.Write("# outputted by TXS3Converter\ns off\n");
@@ -76,6 +76,61 @@ namespace GTTools.Outputs
                 if (!anyMeshSuccessful)
                 {
                     Console.WriteLine($"Model {i} could not be extracted (unsupported data).");
+                    File.Delete(newpath);
+                }
+                else
+                {
+                    Console.WriteLine($"Successfully created {Path.GetFileName(newpath)}");
+                }
+
+                anyMeshSuccessful = false;
+                newpath = Path.ChangeExtension(path, $"mdl_{i}_bbox.obj");
+                using (StreamWriter sw = new(newpath))
+                {
+                    int vertexOffset = 1;
+                    sw.Write("# outputted by TXS3Converter\ns off\n");
+                    for (int n = 0; n < mdl.Meshes.Count; n++)
+                    {
+                        MDL3Mesh mesh = mdl.Meshes[n];
+                        bool badVertex = false;
+                        if (mesh.BBox.Length == 8)
+                        {
+                            bool ok = true;
+                            sw.Write($"o bbox_{n}\n");
+                            for (int v = 0; v < mesh.BBox.Length; v++)
+                            {
+                                if (float.IsNaN(mesh.BBox[v].X) || float.IsNaN(mesh.BBox[v].Y) || float.IsNaN(mesh.BBox[v].Z) ||
+                                    mesh.BBox[v].X > 1e9 || mesh.BBox[v].Y > 1e9 || mesh.BBox[v].Z > 1e9 ||
+                                    mesh.BBox[v].X < -1e9 || mesh.BBox[v].Y < -1e9 || mesh.BBox[v].Z < -1e9)
+                                {
+                                    sw.Write($"v 0.0 0.0 0.0\n");
+                                    badVertex = true;
+                                    ok = false;
+                                }
+                                else
+                                {
+                                    sw.Write($"v {mesh.BBox[v].X:f} {mesh.BBox[v].Y:f} {mesh.BBox[v].Z:f}\n");
+                                }
+                            }
+                            sw.Write($"f {vertexOffset + 0} {vertexOffset + 1} {vertexOffset + 2} {vertexOffset + 3} \n" +
+                                     $"f {vertexOffset + 4} {vertexOffset + 5} {vertexOffset + 6} {vertexOffset + 7} \n" +
+                                     $"f {vertexOffset + 0} {vertexOffset + 3} {vertexOffset + 7} {vertexOffset + 4} \n" +
+                                     $"f {vertexOffset + 1} {vertexOffset + 2} {vertexOffset + 6} {vertexOffset + 5} \n" +
+                                     $"f {vertexOffset + 0} {vertexOffset + 1} {vertexOffset + 5} {vertexOffset + 4} \n" +
+                                     $"f {vertexOffset + 2} {vertexOffset + 3} {vertexOffset + 7} {vertexOffset + 6} \n");
+                            vertexOffset += 8;
+
+                            if (ok)
+                                anyMeshSuccessful = true;
+                        }
+
+                        if (badVertex)
+                            Console.WriteLine("Model's bbox data could not be parsed entirely:\n some bboxes may be incorrect.");
+                    }
+                }
+                if (!anyMeshSuccessful)
+                {
+                    Console.WriteLine($"Model {i}'s bbox could not be extracted (unsupported data).");
                     File.Delete(newpath);
                 }
                 else

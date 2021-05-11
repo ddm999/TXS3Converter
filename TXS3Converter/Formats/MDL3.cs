@@ -77,6 +77,94 @@ namespace GTTools.Formats
 
             return mdl;
         }
+        
+        public static byte[] EditModel(byte[] bytes, int offset, Dictionary<int, MDL3Mesh.Vertex[]> meshEditVertex, List<int> meshDelete)
+        {
+            var sr = new SpanReader(bytes, endian: Endian.Big);
+            var sw = new SpanWriter(bytes, endian: Endian.Big);
+
+            sr.Position = offset;
+
+            if (sr.ReadStringRaw(4) != MAGIC)
+            {
+                Console.WriteLine("Internal error: PACB MDL3 pointer isn't an MDL3...");
+                return bytes;
+            }
+
+            int size = sr.ReadInt32();
+
+            sr.Position += 0x0C;
+            uint meshCount = sr.ReadUInt16();
+            uint meshInfoCount = sr.ReadUInt16();
+            uint fvfTableCount = sr.ReadUInt16();
+            uint boneCount = sr.ReadUInt16();
+
+            sr.Position += 0x1C;
+            uint meshTableAddress = sr.ReadUInt32();
+            uint meshInfoTableAddress = sr.ReadUInt32();
+            uint fvfTableAddress = sr.ReadUInt32();
+            uint unkOffset2 = sr.ReadUInt32();
+            uint txsOffset = sr.ReadUInt32();
+            uint shdsOffset = sr.ReadUInt32();
+            uint boneOffset = sr.ReadUInt32();
+
+            //Console.WriteLine($"- mesh {meshCount} @ 0x{meshTableAddress:X}");
+            //Console.WriteLine($"- meshEditVertex {meshEditVertex.Count}");
+
+            // need FVF info to edit vertices
+            MDL3FVF[] fvfInfo = new MDL3FVF[fvfTableCount];
+            for (int i = 0; i < fvfTableCount; i++)
+            {
+                sr.Position = (int)(offset + fvfTableAddress + i * 0x78);
+                fvfInfo[i] = MDL3FVF.FromStream(ref sr);
+            }
+
+            for (int n=0; n<meshCount; n++)
+            {
+                if (meshDelete.Contains(n))
+                {
+                    sw.Position = (int)(offset + meshTableAddress + n * 0x30);
+                    Console.WriteLine($"Hiding obj_{n} @ 0x{sr.Position:X}");
+                    sw.Position += 0x6;
+                    sw.WriteUInt16(0); // null1 (visibility flags?)
+
+                    /*
+                    sw.Position += 0x4;
+                    sw.WriteUInt32(0); // textureIndex (I think 0 is always invisible lol)
+                    sw.Position += 0x2;
+                    sw.WriteUInt32(0); // vertexCount
+                    sw.Position += 0x4;
+                    sw.WriteUInt32(0); // facesDataLength
+                    sw.Position += 0x10;
+                    sw.WriteUInt32(0); // facesCount
+                    */
+                }
+                else if (meshEditVertex.ContainsKey(n))
+                {
+                    sr.Position = (int)(offset + meshTableAddress + n * 0x30);
+                    Console.WriteLine($"Editing obj_{n} @ 0x{sr.Position:X}");
+
+                    sr.Position += 0x2;
+                    uint fvfIndex = sr.ReadUInt16();
+                    sr.Position += 0x4;
+                    uint vertexCount = sr.ReadUInt32();
+                    uint vertexOffset = sr.ReadUInt32();
+                    Console.WriteLine($" obj_{n} has {vertexCount} vertices @ 0x{offset + vertexOffset:X}");
+
+                    uint fvfDataLength = fvfInfo[fvfIndex].dataLength;
+                    for (int i = 0; i < vertexCount; i++)
+                    {
+                        sw.Position = (int)(offset + vertexOffset + i * fvfDataLength);
+                        //Console.WriteLine($"- Writing vertex @ 0x{sw.Position:X}");
+                        sw.WriteSingle(meshEditVertex[n][i].X);
+                        sw.WriteSingle(meshEditVertex[n][i].Y);
+                        sw.WriteSingle(meshEditVertex[n][i].Z);
+                    }
+                }
+            }
+
+            return bytes;
+        }
 
         public static MDL3 TexturesFromFile(string path)
         {

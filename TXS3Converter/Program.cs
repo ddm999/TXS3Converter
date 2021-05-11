@@ -97,8 +97,13 @@ namespace GTTools
 
             if (args.Contains("-o"))
                 newpath = args[Array.IndexOf(args, "-o")+1];
-            
-            string magic = GetFileMagic(path);
+
+            string magic = "";
+            if (Path.GetExtension(path) == ".obj")
+                magic = "OBJ";
+            else
+                magic = GetFileMagic(path);
+
             switch (magic)
             {
                 case "TXS3":
@@ -116,6 +121,9 @@ namespace GTTools
                     else
                         newpath = Path.GetFileName(path);
                     OBJ.FromPACB(pacb, newpath);
+                    break;
+                case "OBJ":
+                    ReverseOBJ.FromFile(path, newpath);
                     break;
                 default:
                     if (!_texConvExists && !File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "texconv.exe")))

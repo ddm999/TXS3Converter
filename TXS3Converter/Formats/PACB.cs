@@ -25,19 +25,14 @@ namespace GTTools.Formats
 
         public Dictionary<uint, PACBInfo> PackInfo { get; private set; } = new Dictionary<uint, PACBInfo>();
         public List<(PACBTypes, int)> DataOffsets { get; private set; } = new List<(PACBTypes, int)>();
-        
+
         public const string MAGIC = "PACB";
         public const string MAGIC_LE = "PACL";
 
         public Dictionary<uint, MDL3> Models { get; private set; } = new Dictionary<uint, MDL3>();
 
-        public static PACB FromFile(string path)
+        static PACB LoadPack(ref ReadOnlySpan<byte> span)
         {
-            if (!File.Exists(path))
-                throw new FileNotFoundException("File does not exist");
-
-            ReadOnlySpan<byte> span = File.ReadAllBytes(path);
-
             var sr = new SpanReader(span, endian: Endian.Big);
 
             if (sr.Length < 0x40)
@@ -84,11 +79,23 @@ namespace GTTools.Formats
                     pacb.DataOffsets.Add((type, offsetValue + packOffset));
                     Console.WriteLine($"Packed data type {type} at 0x{offsetValue + packOffset:X}");
                 }
-                /*else if (offsetValue != 0)
+                else if (offsetValue != 0)
                 {
                     Console.WriteLine($"Packed data type Other at 0x{offsetValue + packOffset:X}");
-                }*/
+                }
             }
+
+            return pacb;
+        }
+
+        public static PACB FromFile(string path)
+        {
+            if (!File.Exists(path))
+                throw new FileNotFoundException("File does not exist");
+
+            ReadOnlySpan<byte> span = File.ReadAllBytes(path);
+
+            PACB pacb = LoadPack(ref span);
 
             uint n = 0;
             for (int i = 0; i < pacb.DataOffsets.Count; i++)
@@ -98,20 +105,38 @@ namespace GTTools.Formats
                     if (i < pacb.DataOffsets.Count - 1)
                     {
                         pacb.Models.Add(n, MDL3.ModelFromSpan(
-                                         span.Slice(pacb.DataOffsets[i].Item2,
-                                                    pacb.DataOffsets[i + 1].Item2 - pacb.DataOffsets[i].Item2)));
+                                            span[pacb.DataOffsets[i].Item2..pacb.DataOffsets[i+1].Item2]));
                     }
                     else
                     {
-                        pacb.Models.Add(n, MDL3.ModelFromSpan(
-                                         span.Slice(pacb.DataOffsets[i].Item2,
-                                                    span.Length - pacb.DataOffsets[i].Item2)));
+                        pacb.Models.Add(n, MDL3.ModelFromSpan(span[pacb.DataOffsets[i].Item2..]));
                     }
                     n++;
                 }
             }
 
             return pacb;
+        }
+
+        public static void EditFile(string path, Dictionary<int, MDL3Mesh.Vertex[]> meshEditVertex, List<int> meshDelete)
+        {
+            byte[] bytes = File.ReadAllBytes(path);
+
+            ReadOnlySpan<byte> span = bytes;
+            PACB pacb = LoadPack(ref span);
+            //Console.WriteLine($"- Loaded PACB.");
+
+            for (int i = 0; i < pacb.DataOffsets.Count; i++)
+            {
+                if (pacb.DataOffsets[i].Item1 == PACBTypes.MDL3)
+                {
+                    //Console.WriteLine($"- Found MDL3 @ 0x{pacb.DataOffsets[i].Item2:X}");
+                    bytes = MDL3.EditModel(bytes, pacb.DataOffsets[i].Item2, meshEditVertex, meshDelete);
+                    break;
+                }
+            }
+
+            File.WriteAllBytes(path, bytes);
         }
     }
 }

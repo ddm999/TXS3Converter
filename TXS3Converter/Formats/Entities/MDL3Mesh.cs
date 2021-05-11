@@ -34,20 +34,20 @@ namespace GTTools.Formats.Entities
             uint flag1 = sr.ReadByte();   //unk flag 1
             uint flag2 = sr.ReadByte();   //unk flag 2
             uint fvfIndex = sr.ReadUInt16();
-            uint unkIndex = sr.ReadUInt16();             // not unique... maybe texture index?
-            uint null1 = sr.ReadUInt16();                // not actually a null, seems to be more flags
-            uint vertexCount = sr.ReadUInt32();
+            uint textureIndex = sr.ReadUInt16();         // index into the embedded texture info?
+            uint null1 = sr.ReadUInt16();                // 0x08, seems to have no effect
+            uint vertexCount = sr.ReadUInt32();          // UNUSED by game
             uint vertexOffset = sr.ReadUInt32();         // null for PS3 tracks, unsure how they find the data
 
-            uint null3 = sr.ReadUInt32();                // actually a null
-            uint facesDataLength = sr.ReadUInt32();
+            uint null3 = sr.ReadUInt32();                // 0x00000000
+            uint facesDataLength = sr.ReadUInt32();      // UNUSED by game
             uint facesOffset = sr.ReadUInt32();          // null for PS3 tracks, unsure how they find the data
 
-            uint null5 = sr.ReadUInt32();
-            uint null6 = sr.ReadUInt32();
-            uint facesCount = sr.ReadUInt32();           // faces count just randomly further in the struct 🧠
+            uint null5 = sr.ReadUInt32();                // 0x00000000
+            uint null6 = sr.ReadUInt32();                // 0x0000FFFF
+            uint facesCount = sr.ReadUInt32();           // UNUSED by game
             uint boxOffset = sr.ReadUInt32();            // pure X,Y,Z that defines a bounding 6-face for the object: unknown use
-            uint unkOffset2 = sr.ReadUInt32();
+            uint unkOffset2 = sr.ReadUInt32();           // null?
 
             if (vertexOffset > sr.Length || facesOffset > sr.Length || boxOffset > sr.Length)
             {
@@ -118,10 +118,10 @@ namespace GTTools.Formats.Entities
 
             if (boxOffset > 0)
             {
-                meshInfo.BBox = new Vertex[6];
+                meshInfo.BBox = new Vertex[8];
                 int curPos = sr.Position;
                 sr.Position = (int)boxOffset;
-                for (int i = 0; i < 6; i++)
+                for (int i = 0; i < 8; i++)
                 {
                     meshInfo.BBox[i].X = sr.ReadSingle();
                     meshInfo.BBox[i].Y = sr.ReadSingle();
