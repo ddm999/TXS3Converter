@@ -26,6 +26,7 @@ namespace GTTools.Formats.Entities
         public Vertex[] Verts = Array.Empty<Vertex>();
         public Face[] Faces = Array.Empty<Face>();
         public Vertex[] BBox;
+        public uint TextureIndex;
 
         public static MDL3Mesh FromStream(ref SpanReader sr, MDL3FVF[] fvf = null, int n = 0)
         {
@@ -34,7 +35,7 @@ namespace GTTools.Formats.Entities
             uint flag1 = sr.ReadByte();   //unk flag 1
             uint flag2 = sr.ReadByte();   //unk flag 2
             uint fvfIndex = sr.ReadUInt16();
-            uint textureIndex = sr.ReadUInt16();         // index into the embedded texture info?
+            meshInfo.TextureIndex = sr.ReadUInt16();     // index into the embedded texture info?
             uint null1 = sr.ReadUInt16();                // 0x08, seems to have no effect
             uint vertexCount = sr.ReadUInt32();          // UNUSED by game
             uint vertexOffset = sr.ReadUInt32();         // null for PS3 tracks, unsure how they find the data
@@ -111,7 +112,7 @@ namespace GTTools.Formats.Entities
                 }
 
                 if (badFace)
-                    Console.WriteLine($"Model's obj_{n} will have missing faces (tristrips not supported).");
+                    Console.WriteLine($" Model's obj_{n} will have missing faces (tristrips not supported).");
 
                 sr.Position = curPos;
             }

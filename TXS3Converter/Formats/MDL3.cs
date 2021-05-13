@@ -75,12 +75,14 @@ namespace GTTools.Formats
                 mdl.Meshes.Add(MDL3Mesh.FromStream(ref sr, fvfInfo, i));
             }
 
-            mdl.FloatyMaps = new();
+            //TEMP: floaty maps break with some maps :(
+            //TODO: rename these from floaty maps you idiot
+            /*mdl.FloatyMaps = new();
             for (int i = 0; i < floatymapCount; i++)
             {
                 sr.Position = (int)(floatymapTableAddress + i*0x30);
                 mdl.FloatyMaps.Add(MDL3FloatyMap.FromStream(ref sr, i));
-            }
+            }*/
 
             if (txsOffset >= span.Length)
             {

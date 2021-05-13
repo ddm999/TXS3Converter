@@ -10,6 +10,8 @@ namespace GTTools.Outputs
     {
         public static void FromPACB(PACB pacb, string path)
         {
+            uint maxTextureIndex = 0;
+
             for (uint i = 0; i < pacb.Models.Count; i++)
             {
                 MDL3 mdl = pacb.Models[i];
@@ -24,6 +26,8 @@ namespace GTTools.Outputs
                     int vertexOffset = 1;
 
                     sw.Write("# outputted by TXS3Converter\ns off\n");
+                    //if (i == 0)
+                    //    sw.Write($"mtllib {Path.GetFileName(path)}.mtl\n");
                     for (int n = 0; n < mdl.Meshes.Count; n++)
                     {
                         MDL3Mesh mesh = mdl.Meshes[n];
@@ -32,7 +36,14 @@ namespace GTTools.Outputs
                         if (mesh.Verts.Length != 0 && mesh.Faces.Length != 0)
                         {
                             bool ok = true;
+                            //if (i == 0)
+                            //    sw.Write($"usemtl mat{mesh.TextureIndex}\n");
+
                             sw.Write($"o obj_{n}\n");
+
+                            if (maxTextureIndex < mesh.TextureIndex)
+                                maxTextureIndex = mesh.TextureIndex;
+
                             for (int v = 0; v < mesh.Verts.Length; v++)
                             {
                                 if (float.IsNaN(mesh.Verts[v].X) || float.IsNaN(mesh.Verts[v].Y) || float.IsNaN(mesh.Verts[v].Z) ||
@@ -93,7 +104,7 @@ namespace GTTools.Outputs
                     {
                         MDL3Mesh mesh = mdl.Meshes[n];
                         bool badVertex = false;
-                        if (mesh.BBox.Length == 8)
+                        if (mesh.BBox != null && mesh.BBox.Length == 8)
                         {
                             bool ok = true;
                             sw.Write($"o bbox_{n}\n");
@@ -185,7 +196,7 @@ namespace GTTools.Outputs
                 }
                 if (!anyMeshSuccessful)
                 {
-                    Console.WriteLine($"Model {i}'s floaty could not be extracted (unsupported data).");
+                    //Console.WriteLine($"Model {i}'s floaty could not be extracted (unsupported data).");
                     File.Delete(newpath);
                 }
                 else
@@ -193,6 +204,27 @@ namespace GTTools.Outputs
                     Console.WriteLine($"Successfully created {Path.GetFileName(newpath)}");
                 }
             }
+
+            //TODO: find the magical mystery material table
+            /*using (StreamWriter sw = new(path + ".mtl"))
+            {
+                sw.Write($"# outputted by TXS3Converter\n");
+
+                string folder = Path.GetFileName(path) + "_tex";
+                int lastTxsNum = pacb.Textures.Count - 1;
+                for (int n = 0; n < pacb.Textures[lastTxsNum].Count; n++)
+                {
+                    sw.Write($"newmtl mat{n}\n Kd 1.0 1.0 1.0\n Ks 0.0 0.0 0.0\n d 1.0\n" +
+                             $" map_Kd {folder}/{n}.png\n");
+                }
+                if (pacb.Textures.Count < maxTextureIndex+1)
+                {
+                    for (int n = pacb.Textures[lastTxsNum].Count; n < maxTextureIndex+1; n++)
+                    {
+                        sw.Write($"newmtl mat{n}\nKd 1.0 0.0 0.0\n Ks 0.0 0.0 0.0\n d 1.0\n");
+                    }
+                }
+            }*/
         }
     }
 }

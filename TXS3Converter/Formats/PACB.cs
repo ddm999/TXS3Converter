@@ -20,7 +20,9 @@ namespace GTTools.Formats
         { // ignore all except MDL3 and TXS3 for now
             padding = -1,
             MDL3 = 0,
+            MDL3_track,
             TXS3,
+            TXS3_data, // data used by track MDL3
         }
 
         public Dictionary<uint, PACBInfo> PackInfo { get; private set; } = new Dictionary<uint, PACBInfo>();
@@ -30,6 +32,7 @@ namespace GTTools.Formats
         public const string MAGIC_LE = "PACL";
 
         public Dictionary<uint, MDL3> Models { get; private set; } = new Dictionary<uint, MDL3>();
+        public List<List<TXS3>> Textures = new();
 
         static PACB LoadPack(ref ReadOnlySpan<byte> span)
         {
@@ -63,13 +66,18 @@ namespace GTTools.Formats
                 PACBTypes type = PACBTypes.padding;
                 switch (i)
                 {
+                    case 1:
+                        type = PACBTypes.MDL3_track;
+                        break;
                     case uint when i < 7: // i hate this
                     case 24:
                         type = PACBTypes.MDL3;
                         break;
                     case 36:
-                    case 43:
                         type = PACBTypes.TXS3;
+                        break;
+                    case 43:
+                        type = PACBTypes.TXS3_data;
                         break;
                 }
 
@@ -81,6 +89,7 @@ namespace GTTools.Formats
                 }
                 else if (offsetValue != 0)
                 {
+                    pacb.DataOffsets.Add((type, offsetValue + packOffset));
                     Console.WriteLine($"Packed data type Other at 0x{offsetValue + packOffset:X}");
                 }
             }
@@ -96,8 +105,11 @@ namespace GTTools.Formats
             ReadOnlySpan<byte> span = File.ReadAllBytes(path);
 
             PACB pacb = LoadPack(ref span);
+            var sr = new SpanReader(span, endian: Endian.Big);
 
-            uint n = 0;
+            int trackModelOffset = 0x0;
+
+            uint n = 1;
             for (int i = 0; i < pacb.DataOffsets.Count; i++)
             {
                 if (pacb.DataOffsets[i].Item1 == PACBTypes.MDL3)
@@ -112,6 +124,29 @@ namespace GTTools.Formats
                         pacb.Models.Add(n, MDL3.ModelFromSpan(span[pacb.DataOffsets[i].Item2..]));
                     }
                     n++;
+                }
+                else if (pacb.DataOffsets[i].Item1 == PACBTypes.TXS3)
+                {
+                    sr.Position = pacb.DataOffsets[i].Item2;
+                    if (i < pacb.DataOffsets.Count - 1)
+                    {
+                        pacb.Textures.Add(TXS3.FromStream(ref sr, pacb.DataOffsets[i+1].Item2));
+                    }
+                    else
+                    {
+                        pacb.Textures.Add(TXS3.FromStream(ref sr, sr.Length));
+                    }
+                }
+                else if (pacb.DataOffsets[i].Item1 == PACBTypes.MDL3_track)
+                {
+                    trackModelOffset = pacb.DataOffsets[i].Item2;
+                    pacb.Models.Add(0, MDL3.ModelFromSpan(
+                                        span[trackModelOffset..pacb.DataOffsets[i + 1].Item2]));
+                }
+                else if (pacb.DataOffsets[i].Item1 == PACBTypes.TXS3_data)
+                {
+                    sr.Position = trackModelOffset;
+                    pacb.Textures.Add(TXS3.FromStream_ModelIndex(ref sr, pacb.DataOffsets[i].Item2));
                 }
             }
 

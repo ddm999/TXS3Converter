@@ -121,6 +121,24 @@ namespace GTTools
                     else
                         newpath = Path.GetFileName(path);
                     OBJ.FromPACB(pacb, newpath);
+                    Directory.CreateDirectory(Path.GetFileNameWithoutExtension(path)+"_tex");
+                    for (int x = 0; x < pacb.Textures.Count; x++)
+                    {
+                        for (int y = 0; y < pacb.Textures[x].Count; y++)
+                        {
+                            if (pacb.Textures[x][y].OriginalFilePath != null)
+                            {
+                                pacb.Textures[x][y].SaveAsPng(Path.GetFileNameWithoutExtension(path) + "_tex/" + pacb.Textures[x][y].OriginalFilePath + ".png");
+                                Console.WriteLine($"Saved named texture {pacb.Textures[x][y].OriginalFilePath}");
+                            }
+                            else
+                            {
+                                pacb.Textures[x][y].SaveAsPng(Path.GetFileNameWithoutExtension(path) + "_tex/" + y + ".png");
+                                //Console.WriteLine($"Saved texture {y}");
+                            }
+                        }
+                        Console.WriteLine($"TXS num {x+1}: Saved {pacb.Textures[x].Count} total textures.");
+                    }
                     break;
                 case "OBJ":
                     ReverseOBJ.FromFile(path, newpath);

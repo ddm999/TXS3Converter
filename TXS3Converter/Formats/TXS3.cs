@@ -259,26 +259,43 @@ namespace GTTools.Formats
             converter.WaitForExit();
         }
 
-        public static List<TXS3> FromStream(ref SpanReader sr)
+        public static List<TXS3> FromStream(ref SpanReader sr, int end=0)
         {
+            int startPos = sr.Position;
+
             if (sr.ReadStringRaw(4) != MAGIC)
                 throw new InvalidDataException("Could not parse TXS3 from stream, not a valid TXS3 image file.");
 
             List<TXS3> textures = new List<TXS3>();
 
-            sr.Position += 4; // No size, it's bundled
+            int size = sr.ReadInt32();
+            int basePos = sr.ReadInt32();
+            int realsize = sr.ReadInt32();
+            int null1 = sr.ReadInt32();
+            uint imageCount = sr.ReadUInt16();
+            uint streamImageCount = sr.ReadUInt16();
+            int metadataOffset = sr.ReadInt32();
+            int imageDataOffset = sr.ReadInt32();
 
-            int basePos = sr.ReadInt32(); // Original Position, if bundled
-            sr.Position += 4; // Real Size, not present here
-            sr.Position += 4; // Nothing
-            uint imageCount = sr.ReadUInt32(); // Bundled txs in files can have multiple images inside
-            sr.Position += 4;
-            uint listEntryOffsetBegin = sr.ReadUInt32();
+            Console.WriteLine($"Found texture set with {imageCount} images");
+
+            Dictionary<int, string> imageNames = new();
+            for (int i = 0; i < imageCount; i++)
+            {
+                sr.Position = startPos + metadataOffset + (i * 0x44);
+                sr.Position += 0x40;
+                int imageNameOffset = sr.ReadInt32();
+                if (imageNameOffset != 0)
+                {
+                    sr.Position = startPos + imageNameOffset;
+                    imageNames.Add(i, sr.ReadString0());
+                }
+            }
 
             for (int i = 0; i < imageCount; i++)
             {
                 TXS3 tex = new TXS3();
-                sr.Position = (int)listEntryOffsetBegin + (i * 32);
+                sr.Position = startPos + imageDataOffset + (i * 0x20);
                 int imageOffset = sr.ReadInt32();
 
                 int imageSize = sr.ReadInt32();
@@ -295,7 +312,7 @@ namespace GTTools.Formats
                     tex.Format = ImageFormat.DXT5;
                 else if (imageType == 0xA5)
                     tex.Format = ImageFormat.DXT10;
-                Console.WriteLine(imageType);
+                //Console.WriteLine(imageType);
 
                 tex.Mipmap = sr.ReadByte() - 1;
                 sr.ReadByte(); // 1
@@ -303,13 +320,100 @@ namespace GTTools.Formats
                 tex.Height = sr.ReadUInt16();
 
                 // Got header, proceed to parse the image
-                sr.Position = imageOffset;
-                tex._ddsData = tex.CreateDDSData(sr.ReadBytes(imageSize));
+                sr.Position = startPos + imageOffset;
+
+                if (imageNames.ContainsKey(i))
+                {
+                    tex.OriginalFilePath = imageNames[i];
+                    Console.WriteLine($" {tex.OriginalFilePath} @ 0x{sr.Position:X} to 0x{sr.Position + imageSize:X}, {tex.Width}x{tex.Height} w/ {tex.Mipmap} mipmaps.");
+                }
+                else
+                    Console.WriteLine($" Image @ 0x{sr.Position:X} to 0x{sr.Position + imageSize:X}, {tex.Width}x{tex.Height} w/ {tex.Mipmap} mipmaps.");
+
+                tex._ddsData = tex.CreateDDSData(sr.ReadBytes(imageSize), true);
 
                 textures.Add(tex);
             }
 
             sr.Position = basePos;
+            return textures;
+        }
+
+        public static List<TXS3> FromStream_ModelIndex(ref SpanReader sr, int txsDataOffset)
+        {
+            int startPos = sr.Position;
+
+            if (sr.ReadStringRaw(4) != MDL3.MAGIC) // not an MDL3
+                return new();
+
+            sr.Position += 0x44;
+            uint txsIndexOffset = sr.ReadUInt32();
+
+            sr.Position = startPos + (int)txsIndexOffset;
+            if (sr.ReadStringRaw(4) != MAGIC) // not a TXS3
+                return new();
+
+            List<TXS3> textures = new List<TXS3>();
+
+            int size = sr.ReadInt32();
+            int basePos = sr.ReadInt32();
+            int realsize = sr.ReadInt32();
+            int null1 = sr.ReadInt32();
+            uint imageCount = sr.ReadUInt16();
+            uint streamImageCount = sr.ReadUInt16();
+            int metadataOffset = sr.ReadInt32();
+            int imageDataOffset = sr.ReadInt32();
+            int baseDDSOffset = sr.ReadInt32();
+
+            Console.WriteLine($"Embedded texture set with {streamImageCount} images");
+
+            sr.Position = txsDataOffset;
+            if (sr.ReadStringRaw(4) != MAGIC) // not a TXS3
+                return new();
+
+            sr.Position += 0x18;
+            int actualDDSOffset = sr.ReadInt32();
+
+            for (int i = 0; i < streamImageCount; i++)
+            {
+                TXS3 tex = new TXS3();
+                sr.Position = startPos + imageDataOffset + (i * 0x20);
+                int imageOffset = sr.ReadInt32();
+
+                int imageSize = sr.ReadInt32();
+                sr.ReadByte();
+                byte imageType = sr.ReadByte();
+
+                if (imageType == 0x85)
+                    tex.Format = ImageFormat.DXT10_MORTON;
+                else if (imageType == 0x86 || imageType == 0xA6)
+                    tex.Format = ImageFormat.DXT1;
+                else if (imageType == 0x87 || imageType == 0xA7)
+                    tex.Format = ImageFormat.DXT3;
+                else if (imageType == 0x88 || imageType == 0xA8)
+                    tex.Format = ImageFormat.DXT5;
+                else if (imageType == 0xA5)
+                    tex.Format = ImageFormat.DXT10;
+                //Console.WriteLine(imageType);
+
+                sr.ReadByte(); // unknown, doesn't seem to be mipmap
+                tex.Mipmap = 0;
+                sr.ReadByte(); // 1
+                tex.Width = sr.ReadUInt16();
+                tex.Height = sr.ReadUInt16();
+
+                // Got header, proceed to parse the image
+                sr.Position = (imageOffset - baseDDSOffset) + (txsDataOffset + actualDDSOffset);
+
+                sr.Position += 0xB8; //TODO: figure out where this comes from
+
+                Console.WriteLine($" Image @ 0x{sr.Position:X} to 0x{sr.Position + imageSize:X}, {tex.Width}x{tex.Height} w/ {tex.Mipmap} mipmaps.");
+
+                tex._ddsData = tex.CreateDDSData(sr.ReadBytes(imageSize), true);
+
+                textures.Add(tex);
+            }
+
             return textures;
         }
 
@@ -346,110 +450,109 @@ namespace GTTools.Formats
         }
 
 
-        private byte[] CreateDDSData(byte[] imageData)
+        private byte[] CreateDDSData(byte[] imageData, bool noStride=false)
         {
             using var ms = new MemoryStream();
             using var bw = new BinaryWriter(ms);
-            try
-            {
-                // https://gist.github.com/Scobalula/d9474f3fcf3d5a2ca596fceb64e16c98#file-directxtexutil-cs-L355
-                bw.Write(new char[] { 'D', 'D', 'S', ' ' });
-                bw.Write(124);    // dwSize (Struct Size)
-                bw.Write((uint)(DDSHeaderFlags.TEXTURE)); // dwFlags
-                bw.Write(Height); // dwHeight
 
+            // https://gist.github.com/Scobalula/d9474f3fcf3d5a2ca596fceb64e16c98#file-directxtexutil-cs-L355
+            bw.Write(new char[] { 'D', 'D', 'S', ' ' });
+            bw.Write(124);    // dwSize (Struct Size)
+            bw.Write((uint)(DDSHeaderFlags.TEXTURE)); // dwFlags
+            bw.Write(Height); // dwHeight
+
+            int width;
+            if (noStride == true)
+                width = Width;
+            else
+            {
                 // Dirty fix, some TXS3's in GTHD have 1920 as width, but its actually 2048. Stride is correct, so use it instead.
-                int width;
                 if (Format == ImageFormat.DXT1)
                     width = (int)Stride / 2;  // dwWidth
                 else
                     width = (int)Stride / 4;  // dwWidth
-                bw.Write(width);
-
-                switch (Format)   // dwPitchOrLinearSize
-                {
-                    case ImageFormat.DXT1:
-                        bw.Write(Height * width / 2);
-                        break;
-                    case ImageFormat.DXT3:
-                    case ImageFormat.DXT5:
-                        bw.Write(Height * width);
-                        break;
-                    default:
-                        bw.Write((width * 32 + 7) / 8);
-                        break;
-                }
-
-                bw.Write(0);    // Depth
-                bw.Write(Mipmap);
-                bw.Write(new byte[44]); // reserved
-                bw.Write(32); // DDSPixelFormat Header starts here - Struct Size
-
-                switch (Format)
-                {
-                    case ImageFormat.DXT1:
-                    case ImageFormat.DXT3:
-                    case ImageFormat.DXT5:
-                        bw.Write((uint)DDSPixelFormatFlags.DDPF_FOURCC); // Format Flags
-                        bw.Write(Format.ToString().ToCharArray()); // FourCC
-                        bw.Write(0); // RGBBitCount
-                        bw.Write(0); // RBitMask
-                        bw.Write(0); // GBitMask
-                        bw.Write(0); // BBitMask
-                        bw.Write(0); // ABitMask
-                        break;
-                    case ImageFormat.DXT10_MORTON:
-                    case ImageFormat.DXT10:
-                        bw.Write((uint)(DDSPixelFormatFlags.DDPF_FOURCC));           // Format Flags
-                        bw.Write("DX10".ToCharArray());            // FourCC
-                        bw.Write(0);         // RGBBitCount
-                        bw.Write(0);  // RBitMask
-                        bw.Write(0);  // GBitMask
-                        bw.Write(0);  // BBitMask
-                        bw.Write(0);  // ABitMask
-                        break;
-                }
-
-                bw.Write(0x1000); // dwCaps, 0x1000 = required
-                bw.Write(new byte[16]); // dwCaps1-4
-
-                if (Format == ImageFormat.DXT10_MORTON || Format == ImageFormat.DXT10)
-                {
-                    // DDS_HEADER_DXT10
-                    bw.Write(87); // DXGI_FORMAT_B8G8R8A8_UNORM
-                    bw.Write(3);  // DDS_DIMENSION_TEXTURE2D
-                    bw.BaseStream.Seek(4, SeekOrigin.Current);  // miscFlag
-                    bw.Write(1); // arraySize
-                    bw.Write(0); // miscFlags2
-
-                    if (Format == ImageFormat.DXT10_MORTON)
-                    {
-                        int bytesPerPix = 4;
-                        int byteCount = (width * Height) * 4;
-                        byte[] newImageData = new byte[byteCount];
-
-                        SpanReader sr = new SpanReader(imageData);
-                        SpanWriter sw = new SpanWriter(newImageData);
-                        Span<byte> pixBuffer = new byte[4];
-                        for (int i = 0; i < width * Height; i++)
-                        {
-                            int pixIndex = MortonReorder(i, width, Height);
-                            pixBuffer = sr.ReadBytes(4);
-                            int destIndex = bytesPerPix * pixIndex;
-                            sw.Position = destIndex;
-                            sw.WriteBytes(pixBuffer);
-                        }
-
-                        imageData = newImageData;
-                    }
-                }
-
-                bw.Write(imageData);
             }
-            catch (Exception e)
+            bw.Write(width);
+
+            switch (Format)   // dwPitchOrLinearSize
             {
-                return null;
+                case ImageFormat.DXT1:
+                    bw.Write(Height * width / 2);
+                    break;
+                case ImageFormat.DXT3:
+                case ImageFormat.DXT5:
+                    bw.Write(Height * width);
+                    break;
+                default:
+                    bw.Write((width * 32 + 7) / 8);
+                    break;
             }
+
+            bw.Write(0);    // Depth
+            bw.Write(Mipmap);
+            bw.Write(new byte[44]); // reserved
+            bw.Write(32); // DDSPixelFormat Header starts here - Struct Size
+
+            switch (Format)
+            {
+                case ImageFormat.DXT1:
+                case ImageFormat.DXT3:
+                case ImageFormat.DXT5:
+                    bw.Write((uint)DDSPixelFormatFlags.DDPF_FOURCC); // Format Flags
+                    bw.Write(Format.ToString().ToCharArray()); // FourCC
+                    bw.Write(0); // RGBBitCount
+                    bw.Write(0); // RBitMask
+                    bw.Write(0); // GBitMask
+                    bw.Write(0); // BBitMask
+                    bw.Write(0); // ABitMask
+                    break;
+                case ImageFormat.DXT10_MORTON:
+                case ImageFormat.DXT10:
+                    bw.Write((uint)(DDSPixelFormatFlags.DDPF_FOURCC));           // Format Flags
+                    bw.Write("DX10".ToCharArray());            // FourCC
+                    bw.Write(0);         // RGBBitCount
+                    bw.Write(0);  // RBitMask
+                    bw.Write(0);  // GBitMask
+                    bw.Write(0);  // BBitMask
+                    bw.Write(0);  // ABitMask
+                    break;
+            }
+
+            bw.Write(0x1000); // dwCaps, 0x1000 = required
+            bw.Write(new byte[16]); // dwCaps1-4
+
+            if (Format == ImageFormat.DXT10_MORTON || Format == ImageFormat.DXT10)
+            {
+                // DDS_HEADER_DXT10
+                bw.Write(87); // DXGI_FORMAT_B8G8R8A8_UNORM
+                bw.Write(3);  // DDS_DIMENSION_TEXTURE2D
+                bw.BaseStream.Seek(4, SeekOrigin.Current);  // miscFlag
+                bw.Write(1); // arraySize
+                bw.Write(0); // miscFlags2
+
+                if (Format == ImageFormat.DXT10_MORTON)
+                {
+                    int bytesPerPix = 4;
+                    int byteCount = (width * Height) * 4;
+                    byte[] newImageData = new byte[byteCount];
+
+                    SpanReader sr = new SpanReader(imageData);
+                    SpanWriter sw = new SpanWriter(newImageData);
+                    Span<byte> pixBuffer = new byte[4];
+                    for (int i = 0; i < width * Height; i++)
+                    {
+                        int pixIndex = MortonReorder(i, width, Height);
+                        pixBuffer = sr.ReadBytes(4);
+                        int destIndex = bytesPerPix * pixIndex;
+                        sw.Position = destIndex;
+                        sw.WriteBytes(pixBuffer);
+                    }
+
+                    imageData = newImageData;
+                }
+            }
+
+            bw.Write(imageData);
 
             return ms.ToArray();
         }
