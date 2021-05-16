@@ -163,7 +163,7 @@ namespace GTTools.Formats
 
             for (int i = 0; i < pacb.DataOffsets.Count; i++)
             {
-                if (pacb.DataOffsets[i].Item1 == PACBTypes.MDL3)
+                if (pacb.DataOffsets[i].Item1 == PACBTypes.MDL3_track)
                 {
                     //Console.WriteLine($"- Found MDL3 @ 0x{pacb.DataOffsets[i].Item2:X}");
                     bytes = MDL3.EditModel(bytes, pacb.DataOffsets[i].Item2, meshEditVertex, meshDelete);

@@ -1,13 +1,67 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Enumeration;
 using GTTools.Formats;
 using GTTools.Formats.Entities;
+using TXS3Converter.Formats;
 
 namespace GTTools.Outputs
 {
     class OBJ
     {
+        static string BrickHelper(float Y)
+        {
+            // creates a dummy object: offset vertices by 136 for this
+            float scale = 0.016f;
+            string str = "";
+
+            // box
+            for (int n=0;n<2;n++)
+                str += $"v {20*scale} {Y+(n*10*scale)} {10*scale}\nv {20*scale} {Y+(n*10*scale)} {-10*scale}\n" +
+                       $"v {-20*scale} {Y+(n*10*scale)} {10*scale}\nv {-20*scale} {Y+(n*10*scale)} {-10*scale}\n";
+            str += "f 1 2 4 3\nf 5 6 8 7\nf 1 2 6 5\nf 3 4 8 7\nf 1 3 7 5\nf 2 4 8 6\n";
+
+            // stud vertices
+            for (int z=-1;z<2;z+=2)
+                for (float x=-15;x<21;x+=10)
+                    for (int y=12;y>9;y-=2)
+                        str += $"v {(x+2)*scale} {Y+(y*scale)} {z*3*scale}\nv {(x)*scale} {Y+(y*scale)} {z*2*scale}\n" +
+                               $"v {(x-2)*scale} {Y+(y*scale)} {z*3*scale}\nv {(x-3)*scale} {Y+(y*scale)} {z*5*scale}\n" +
+                               $"v {(x-2)*scale} {Y+(y*scale)} {z*7*scale}\nv {(x)*scale} {Y+(y*scale)} {z*8*scale}\n" +
+                               $"v {(x+2)*scale} {Y+(y*scale)} {z*7*scale}\nv {(x+3)*scale} {Y+(y*scale)} {z*5*scale}\n";
+
+            // stud faces
+            for (int n=1;n<9;n++)
+            {
+                str += $"f {(n*16)-7} {(n*16)-6} {(n*16)-5} {(n*16)-4} {(n*16)-3} {(n*16)-2} {(n*16)-1} {(n*16)}\n" +
+                       $"f {(n*16)} {(n*16)-7} {(n*16)+1} {(n*16)+8}\n";
+                for (int f=0;f<7;f++)
+                    str += $"f {(n*16)+f-7} {(n*16)+f-6} {(n*16)+f+2} {(n*16)+f+1}\n";
+            }
+
+            return str;
+        }
+
+        static float[][] ArrowheadHelper(float X, float Y, float Z, float R)
+        {
+            // creates an arrow
+            float[] orig = { X, Y, Z };
+            float[] A = { -1f, 0f, -1f };
+            float[] B = { 0f, 0f, 1f };
+            float[] C = {  1f, 0f, -1f };
+
+            float[] newA = { X + (A[0] * MathF.Cos(-R)) - (A[2] * MathF.Sin(-R)), Y,
+                             Z + (A[0] * MathF.Sin(-R)) + (A[2] * MathF.Cos(-R))};
+            float[] newB = { X + (B[0] * MathF.Cos(-R)) - (B[2] * MathF.Sin(-R)), Y,
+                             Z + (B[0] * MathF.Sin(-R)) + (B[2] * MathF.Cos(-R))};
+            float[] newC = { X + (C[0] * MathF.Cos(-R)) - (C[2] * MathF.Sin(-R)), Y,
+                             Z + (C[0] * MathF.Sin(-R)) + (C[2] * MathF.Cos(-R))};
+
+            float[][] ret = { orig, newA, newB, newC };
+            return ret;
+        }
+
         public static void FromPACB(PACB pacb, string path)
         {
             uint maxTextureIndex = 0;
@@ -23,9 +77,9 @@ namespace GTTools.Outputs
                 string newpath = Path.ChangeExtension(path, $"mdl_{i}.obj");
                 using (StreamWriter sw = new(newpath))
                 {
-                    int vertexOffset = 1;
+                    sw.Write("# outputted by TXS3Converter\ns off\no aaa_mdl3\n"+BrickHelper(-100));
+                    int vertexOffset = 137;
 
-                    sw.Write("# outputted by TXS3Converter\ns off\n");
                     //if (i == 0)
                     //    sw.Write($"mtllib {Path.GetFileName(path)}.mtl\n");
                     for (int n = 0; n < mdl.Meshes.Count; n++)
@@ -36,8 +90,8 @@ namespace GTTools.Outputs
                         if (mesh.Verts.Length != 0 && mesh.Faces.Length != 0)
                         {
                             bool ok = true;
-                            //if (i == 0)
-                            //    sw.Write($"usemtl mat{mesh.TextureIndex}\n");
+                            if (i == 0)
+                                sw.Write($"#usemtl mat{mesh.TextureIndex}\n");
 
                             sw.Write($"o obj_{n}\n");
 
