@@ -280,5 +280,162 @@ namespace GTTools.Outputs
                 }
             }*/
         }
+
+        public static void FromRWY(RWY rwy, string path)
+        {
+            string dirname = Path.GetDirectoryName(path);
+            if (dirname != "")
+                Directory.CreateDirectory(dirname);
+            string newpath = Path.ChangeExtension(path, $"rwy.obj");
+            using (StreamWriter sw = new(newpath))
+            {
+                int vertexOffset = 137;
+
+                sw.Write("# outputted by TXS3Converter\ns off\nmtllib rwy.mtl\nusemtl unknown\no aaa_rwy\n" + BrickHelper(-100) +
+                         $"o rwy_bbox\n" +
+                         $"v {rwy.BoundsStart.X} {rwy.BoundsStart.Y} {rwy.BoundsEnd.Z}\n" +
+                         $"v {rwy.BoundsStart.X} {rwy.BoundsStart.Y} {rwy.BoundsStart.Z}\n" +
+                         $"v {rwy.BoundsStart.X} {rwy.BoundsEnd.Y} {rwy.BoundsStart.Z}\n" +
+                         $"v {rwy.BoundsStart.X} {rwy.BoundsEnd.Y} {rwy.BoundsEnd.Z}\n" +
+                         $"v {rwy.BoundsEnd.X} {rwy.BoundsStart.Y} {rwy.BoundsEnd.Z}\n" +
+                         $"v {rwy.BoundsEnd.X} {rwy.BoundsStart.Y} {rwy.BoundsStart.Z}\n" +
+                         $"v {rwy.BoundsEnd.X} {rwy.BoundsEnd.Y} {rwy.BoundsStart.Z}\n" +
+                         $"v {rwy.BoundsEnd.X} {rwy.BoundsEnd.Y} {rwy.BoundsEnd.Z}\n");
+
+                sw.Write($"f {vertexOffset + 0} {vertexOffset + 1} {vertexOffset + 2} {vertexOffset + 3} \n" +
+                         $"f {vertexOffset + 4} {vertexOffset + 5} {vertexOffset + 6} {vertexOffset + 7} \n" +
+                         $"f {vertexOffset + 0} {vertexOffset + 3} {vertexOffset + 7} {vertexOffset + 4} \n" +
+                         $"f {vertexOffset + 1} {vertexOffset + 2} {vertexOffset + 6} {vertexOffset + 5} \n" +
+                         $"f {vertexOffset + 0} {vertexOffset + 1} {vertexOffset + 5} {vertexOffset + 4} \n" +
+                         $"f {vertexOffset + 2} {vertexOffset + 3} {vertexOffset + 7} {vertexOffset + 6} \n");
+                vertexOffset += 8;
+
+                sw.Write("usemtl startgrid\no rwy_startgrid\n");
+                for (int i = 0; i < rwy.StartingGrid.Count; i++)
+                {
+                    RWY.VertexRot vertr = rwy.StartingGrid[i];
+                    float[][] arrow = ArrowheadHelper(vertr.X, vertr.Y, vertr.Z, vertr.R);
+                    for (int n = 0; n < 4; n++)
+                    {
+                        sw.Write($"v {arrow[n][0]} {arrow[n][1]} {arrow[n][2]}\n");
+                    }
+                    sw.Write($"f {vertexOffset} {vertexOffset + 1} {vertexOffset + 2} {vertexOffset + 3}\n");
+                    vertexOffset += 4;
+                }
+
+                sw.Write("usemtl pitbox\no rwy_pitbox\n");
+                for (int i = 0; i < rwy.PitBoxes.Count; i++)
+                {
+                    RWY.VertexRot vertr = rwy.PitBoxes[i];
+                    float[][] arrow = ArrowheadHelper(vertr.X, vertr.Y, vertr.Z, vertr.R);
+                    for (int n = 0; n < 4; n++)
+                    {
+                        sw.Write($"v {arrow[n][0]} {arrow[n][1]} {arrow[n][2]}\n");
+                    }
+                    sw.Write($"f {vertexOffset} {vertexOffset + 1} {vertexOffset + 2} {vertexOffset + 3}\n");
+                    vertexOffset += 4;
+                }
+
+                sw.Write("usemtl pitunknown\no rwy_pitunknown\n");
+                for (int i = 0; i < rwy.PitUnknowns.Count; i++)
+                {
+                    RWY.VertexRot vertr = rwy.PitUnknowns[i];
+                    float[][] arrow = ArrowheadHelper(vertr.X, vertr.Y, vertr.Z, vertr.R);
+                    for (int n = 0; n < 4; n++)
+                    {
+                        sw.Write($"v {arrow[n][0]} {arrow[n][1]} {arrow[n][2]}\n");
+                    }
+                    sw.Write($"f {vertexOffset} {vertexOffset + 1} {vertexOffset + 2} {vertexOffset + 3}\n");
+                    vertexOffset += 4;
+                }
+
+                int ccnt = rwy.Checkpoints.Count;
+                if (ccnt > 0)
+                {
+                    sw.Write("usemtl checkpoints\no rwy_checkpoints\n");
+
+                    for (int i = 0; i < ccnt; i++)
+                    {
+                        RWY.CheckpointHalf left = rwy.Checkpoints[i].left;
+                        sw.Write($"v {left.vertStart.X} {left.vertStart.Y} {left.vertStart.Z}\n");
+                        sw.Write($"v {left.vertEnd.X} {left.vertEnd.Y} {left.vertEnd.Z}\n");
+                        RWY.CheckpointHalf right = rwy.Checkpoints[i].right;
+                        sw.Write($"v {right.vertStart.X + 0.1} {right.vertStart.Y + 1} {right.vertStart.Z + 0.1}\n");
+                        sw.Write($"v {right.vertEnd.X} {right.vertEnd.Y} {right.vertEnd.Z}\n");
+                        sw.Write($"f {vertexOffset} {vertexOffset + 1} {vertexOffset + 3} {vertexOffset + 2}\n");
+                        vertexOffset += 4;
+                    }
+
+                    sw.Write($"l ");
+                    for (int i = 0; i < ccnt; i++)
+                    {
+                        sw.Write($"{vertexOffset + (i*4) + 1 - (ccnt*4)} "); // left.vertEnd
+                    }
+                    sw.Write($"\n");
+                }
+
+                int ucnt = rwy.CutTrack.Count;
+                if (ucnt > 0)
+                {
+                    sw.Write("usemtl unknown\no rwy_unknown\n");
+                    for (int i = 0; i < ucnt; i++)
+                    {
+                        sw.Write($"v {rwy.CutTrack[i].X} {rwy.CutTrack[i].Y} {rwy.CutTrack[i].Z}\n");
+                    }
+                    sw.Write("l ");
+                    for (int i = 0; i < ucnt; i++)
+                    {
+                        sw.Write($"{vertexOffset} ");
+                        vertexOffset++;
+                    }
+                    sw.Write($"\n");
+                }
+
+                List<List<RWY.RoadFace>> roadFaces = new();
+                for (RWY.RoadSurface n = 0; n < RWY.RoadSurface.MAX_ROADSURFACES; n++)
+                    roadFaces.Add(new());
+
+                for (int i = 0; i < rwy.RoadFaces.Count; i++)
+                    roadFaces[rwy.RoadFaces[i].surface].Add(rwy.RoadFaces[i]);
+
+                for (int n = 0; n < (int)RWY.RoadSurface.MAX_ROADSURFACES; n++)
+                {
+                    if (roadFaces[n].Count != 0)
+                    {
+                        string str = RWY.RoadSurfaceToString((RWY.RoadSurface)n);
+                        sw.Write($"usemtl road_{str}\no rwy_road_{str}\n");
+                    }
+                    for (int i = 0; i < roadFaces[n].Count; i++)
+                    {
+                        sw.Write($"v {roadFaces[n][i].A.X} {roadFaces[n][i].A.Y} {roadFaces[n][i].A.Z}\n");
+                        sw.Write($"v {roadFaces[n][i].B.X} {roadFaces[n][i].B.Y} {roadFaces[n][i].B.Z}\n");
+                        sw.Write($"v {roadFaces[n][i].C.X} {roadFaces[n][i].C.Y} {roadFaces[n][i].C.Z}\n");
+                        sw.Write($"f {vertexOffset} {vertexOffset + 1} {vertexOffset + 2}\n");
+                        vertexOffset += 3;
+                    }
+                }
+
+                for (int n = 0; n < rwy.BoundaryMeshes.Count; n++)
+                {
+                    List<RWY.Vertex> verts = rwy.BoundaryMeshes[n].verts;
+                    int vcnt = verts.Count;
+                    if (vcnt > 0)
+                    {
+                        sw.Write($"usemtl unknown\no rwy_boundary_{n}\n");
+                        for (int i = 0; i < vcnt; i++)
+                        {
+                            sw.Write($"v {verts[i].X} {verts[i].Y} {verts[i].Z}\n");
+                        }
+                        sw.Write("l ");
+                        for (int i = 0; i < vcnt; i++)
+                        {
+                            sw.Write($"{vertexOffset} ");
+                            vertexOffset++;
+                        }
+                        sw.Write($"{vertexOffset-vcnt}\n");
+                    }
+                }
+            }
+        }
     }
 }

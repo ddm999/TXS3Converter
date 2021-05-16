@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.IO;
 using System.Text;
@@ -96,9 +96,14 @@ namespace GTTools
             string newpath = "";
 
             if (args.Contains("-o"))
-                newpath = args[Array.IndexOf(args, "-o")+1];
+                newpath = args[Array.IndexOf(args, "-o") + 1];
 
-            string magic = "";
+            if (newpath != "")
+                newpath += "/" + Path.GetFileName(path);
+            else
+                newpath = Path.GetFileName(path);
+
+            string magic;
             if (Path.GetExtension(path) == ".obj")
                 magic = "OBJ";
             else
@@ -116,10 +121,6 @@ namespace GTTools
                 case PACB.MAGIC:
                 case PACB.MAGIC_LE:
                     PACB pacb = PACB.FromFile(path);
-                    if (newpath != "")
-                        newpath += "/" + Path.GetFileName(path);
-                    else
-                        newpath = Path.GetFileName(path);
                     OBJ.FromPACB(pacb, newpath);
                     Directory.CreateDirectory(Path.GetFileNameWithoutExtension(path)+"_tex");
                     for (int x = 0; x < pacb.Textures.Count; x++)
@@ -139,6 +140,10 @@ namespace GTTools
                         }
                         Console.WriteLine($"TXS num {x+1}: Saved {pacb.Textures[x].Count} total textures.");
                     }
+                    break;
+                case RWY.MAGIC:
+                    RWY rwy = RWY.FromFile(path);
+                    OBJ.FromRWY(rwy, newpath);
                     break;
                 case "OBJ":
                     ReverseOBJ.FromFile(path, newpath);
