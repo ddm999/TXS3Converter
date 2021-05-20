@@ -98,8 +98,9 @@ namespace GTTools
             if (args.Contains("-o"))
                 newpath = args[Array.IndexOf(args, "-o") + 1];
 
+            // @me: what the fuck is this
             if (newpath != "")
-                newpath += "/" + Path.GetFileName(path);
+                newpath += ""; //"/" + Path.GetFileName(path);
             else
                 newpath = Path.GetFileName(path);
 

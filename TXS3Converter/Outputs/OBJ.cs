@@ -377,7 +377,8 @@ namespace GTTools.Outputs
                 int ucnt = rwy.CutTrack.Count;
                 if (ucnt > 0)
                 {
-                    sw.Write("usemtl unknown\no rwy_unknown\n");
+                    // don't need material, this is line only
+                    sw.Write("o rwy_cuttracks\n");
                     for (int i = 0; i < ucnt; i++)
                     {
                         sw.Write($"v {rwy.CutTrack[i].X} {rwy.CutTrack[i].Y} {rwy.CutTrack[i].Z}\n");
