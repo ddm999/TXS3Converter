@@ -279,16 +279,26 @@ namespace GTTools.Formats
 
             Console.WriteLine($"Found texture set with {imageCount} images");
 
-            Dictionary<int, string> imageNames = new();
-            for (int i = 0; i < imageCount; i++)
+            if (imageCount == 0 && streamImageCount != 0)
             {
-                sr.Position = startPos + metadataOffset + (i * 0x44);
-                sr.Position += 0x40;
-                int imageNameOffset = sr.ReadInt32();
-                if (imageNameOffset != 0)
+                Console.WriteLine($"Trying streamImage set for {streamImageCount} images");
+                imageCount = streamImageCount;
+                startPos = 0; // embedded uses normal values
+            }
+
+            Dictionary<int, string> imageNames = new();
+            if (metadataOffset != 0)
+            {
+                for (int i = 0; i < imageCount; i++)
                 {
-                    sr.Position = startPos + imageNameOffset;
-                    imageNames.Add(i, sr.ReadString0());
+                    sr.Position = startPos + metadataOffset + (i * 0x44);
+                    sr.Position += 0x40;
+                    int imageNameOffset = sr.ReadInt32();
+                    if (imageNameOffset != 0)
+                    {
+                        sr.Position = startPos + imageNameOffset;
+                        imageNames.Add(i, sr.ReadString0());
+                    }
                 }
             }
 

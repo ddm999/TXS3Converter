@@ -117,7 +117,23 @@ namespace GTTools
                     ProcessTXS3Texture(path);
                     break;
                 case "MDL3":
-                    MDL3.TexturesFromFile(path);
+                    MDL3 mdl = MDL3.ModelFromFile(path);
+                    OBJ.FromMDL(mdl, path, 0);
+                    Directory.CreateDirectory(Path.GetFileNameWithoutExtension(path) + "_tex");
+                    for (int x = 0; x < mdl.Textures.Count; x++)
+                    {
+                        if (mdl.Textures[x].OriginalFilePath != null)
+                        {
+                            mdl.Textures[x].SaveAsPng(Path.GetFileNameWithoutExtension(path) + "_tex/" + mdl.Textures[x].OriginalFilePath + ".png");
+                            Console.WriteLine($"Saved named texture {mdl.Textures[x].OriginalFilePath}");
+                        }
+                        else
+                        {
+                            mdl.Textures[x].SaveAsPng(Path.GetFileNameWithoutExtension(path) + "_tex/" + x + ".png");
+                            //Console.WriteLine($"Saved texture {x}");
+                        }
+                    }
+                    Console.WriteLine($"Saved {mdl.Textures.Count} total textures.");
                     break;
                 case PACB.MAGIC:
                 case PACB.MAGIC_LE:

@@ -18,6 +18,16 @@ namespace GTTools.Formats
         public List<MDL3Mesh> Meshes = new();
         public List<MDL3FloatyMap> FloatyMaps = new();
 
+        public static MDL3 ModelFromFile(string path)
+        {
+            if (!File.Exists(path))
+                throw new FileNotFoundException("File does not exist");
+
+            ReadOnlySpan<byte> span = File.ReadAllBytes(path);
+
+            return ModelFromSpan(span);
+        }
+
         public static MDL3 ModelFromSpan(ReadOnlySpan<byte> span)
         {
             var sr = new SpanReader(span, endian: Endian.Big);
@@ -40,8 +50,10 @@ namespace GTTools.Formats
             uint meshInfoCount = sr.ReadUInt16();
             uint fvfTableCount = sr.ReadUInt16();
             uint boneCount = sr.ReadUInt16();
+            sr.Position += 0xE;
+            uint lightCount = sr.ReadUInt16();
 
-            sr.Position += 0x14;
+            sr.Position += 0x4;
             uint floatymapTableAddress = sr.ReadUInt32();
             uint gtbeTableOffset = sr.ReadUInt32();
             uint meshTableAddress = sr.ReadUInt32();
@@ -51,6 +63,14 @@ namespace GTTools.Formats
             uint txsOffset = sr.ReadUInt32();
             uint shdsOffset = sr.ReadUInt32();
             uint boneOffset = sr.ReadUInt32();
+            uint lightOffset = sr.ReadUInt32();
+            sr.Position += 0x68;
+            uint weirdModelPairOffset = sr.ReadUInt32();
+            // seems to be front/rear crumple zones of cars
+            //   shorts, 0: vert count, 5: face count, 10d total
+            //   offsets, 0: start of vert data, 1: more vert data?? (this doesn't make sense)
+            //   2: unknown floats & flags, 3: 6 verts?, 4: start of face data, 5: more face data??, 6 total
+            //   4 unk floats ending FFFF, 0000000000000000 zeroes, offset of this object
 
             Console.WriteLine($"Found model with {meshCount} meshes");
 
@@ -65,7 +85,8 @@ namespace GTTools.Formats
             for (uint i = 0; i < meshInfoCount; i++)
             {
                 sr.Position = (int)(meshInfoTableAddress + i*0x08);
-                mdl.MeshInfo.Add(i, MDL3MeshInfo.FromStream(ref sr));
+                MDL3MeshInfo meshInfo = MDL3MeshInfo.FromStream(ref sr);
+                mdl.MeshInfo.Add(meshInfo.MeshIndex, meshInfo);
             }
 
             mdl.Meshes = new();
@@ -87,6 +108,11 @@ namespace GTTools.Formats
             if (txsOffset >= span.Length)
             {
                 Console.WriteLine("bruh");
+            }
+            else
+            {
+                sr.Position = (int)txsOffset;
+                mdl.Textures = TXS3.FromStream(ref sr);
             }
 
             return mdl;
